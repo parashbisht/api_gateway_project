@@ -32,3 +32,18 @@ def decode_access_token(token: str) -> dict | None:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     except JWTError:
         return None
+
+
+import secrets
+
+def generate_api_key() -> tuple[str, str, str]:
+    raw_secret = secrets.token_urlsafe(32)          
+    raw_key = f"sk_live_{raw_secret}"
+    prefix = raw_key[:14]                            
+
+    hashed_key = bcrypt.hashpw(raw_key.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return raw_key, prefix, hashed_key
+
+
+def verify_api_key(raw_key: str, hashed_key: str) -> bool:
+    return bcrypt.checkpw(raw_key.encode("utf-8"), hashed_key.encode("utf-8"))

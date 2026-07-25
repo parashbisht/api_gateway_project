@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, func
 from app.db.base import Base
+from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = "users"
@@ -9,3 +10,4 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     plan = Column(String, default="free")  
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    api_keys = relationship("APIKey", back_populates="user")
