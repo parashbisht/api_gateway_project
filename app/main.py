@@ -3,9 +3,11 @@ from app.db.base import Base
 from app.db.session import engine
 from app.api.v1 import auth
 from app.api.v1 import api_keys
+from app.api.v1 import gateway
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="API Gateway")
 app.include_router(auth.router)
 app.include_router(api_keys.router)
+app.include_router(gateway.router)
