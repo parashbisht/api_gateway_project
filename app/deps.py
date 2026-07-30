@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.core.security import decode_access_token, verify_api_key
 from app.models.user import User
 from app.models.api_key import APIKey
+from app.core.rate_limiter import check_rate_limit
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
 
@@ -79,4 +80,12 @@ def get_current_identity(
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated: provide a valid Bearer token or X-API-Key header",
-    )
+
+)
+
+def rate_limited_identity(
+    current_identity: User = Depends(get_current_identity),
+) -> User:
+    check_rate_limit(user_id=current_identity.id, plan=current_identity.plan)
+    return current_identity
+    
