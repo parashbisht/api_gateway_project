@@ -8,6 +8,8 @@ from app.models.request_log import RequestLog
 from app.schemas.analytics import OverviewStats, EndpointStat, UserStat
 from app.deps import get_current_user
 from app.models.user import User
+from fastapi import HTTPException
+from app.core.plans import PLAN_DETAILS
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
@@ -83,3 +85,14 @@ def get_top_users(
         .all()
     )
     return [UserStat(user_id=r.user_id, request_count=r.request_count) for r in results]
+
+
+@router.get("/premium-insights")
+def get_premium_insights(current_user: User = Depends(get_current_user)):
+    plan_info = PLAN_DETAILS.get(current_user.plan)
+    if not plan_info or not plan_info["can_access_premium_analytics"]:
+        raise HTTPException(
+            status_code=403,
+            detail="This feature requires a Premium or Enterprise plan",
+        )
+    return {"message": "Here are your premium insights (simulated)."}

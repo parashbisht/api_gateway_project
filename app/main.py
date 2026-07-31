@@ -8,6 +8,8 @@ from app.middleware.logging_middleware import log_requests_middleware
 from app.api.v1 import analytics
 from app.api.v1 import gateway_routes
 from app.models import product, order  
+from app.api.v1 import plans
+
 
 
 
@@ -21,3 +23,4 @@ app.include_router(gateway.router)
 app.middleware("http")(log_requests_middleware)
 app.include_router(analytics.router)
 app.include_router(gateway_routes.router)
+app.include_router(plans.router)

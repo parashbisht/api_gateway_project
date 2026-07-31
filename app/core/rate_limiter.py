@@ -3,34 +3,23 @@ import uuid
 from fastapi import HTTPException, status
 
 from app.db.redis_client import redis_client
+from app.core.plans import PLAN_DETAILS
 
-PLAN_LIMITS = {
-    "free": {"requests": 100, "window_seconds": 3600},
-    "premium": {"requests": 5000, "window_seconds": 3600},
-    "enterprise": None,  
-}
 
 def check_rate_limit(user_id: int, plan: str) -> None:
-    """
-    Raises HTTP 429 if the user has exceeded their plan's rate limit.
-    Uses a sliding window implemented with a Redis sorted set.
-    """
-    limit_config = PLAN_LIMITS.get(plan)
+    plan_info = PLAN_DETAILS.get(plan)
 
-    if limit_config is None:
-        return  
+    if plan_info is None or plan_info["requests_per_hour"] is None:
+        return  # unknown plan or unlimited (enterprise)
 
-    max_requests = limit_config["requests"]
-    window_seconds = limit_config["window_seconds"]
+    max_requests = plan_info["requests_per_hour"]
+    window_seconds = 3600
 
     key = f"rate_limit:{user_id}"
     now = time.time()
     window_start = now - window_seconds
 
-   
     redis_client.zremrangebyscore(key, 0, window_start)
-
-    
     current_count = redis_client.zcard(key)
 
     if current_count >= max_requests:
@@ -40,9 +29,6 @@ def check_rate_limit(user_id: int, plan: str) -> None:
                    f"{window_seconds} seconds for '{plan}' plan.",
         )
 
-    
     member = f"{now}-{uuid.uuid4()}"
     redis_client.zadd(key, {member: now})
-
-    
     redis_client.expire(key, window_seconds)
