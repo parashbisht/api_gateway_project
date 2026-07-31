@@ -7,6 +7,14 @@ from app.api.v1 import auth, api_keys, gateway, analytics, gateway_routes, plans
 from app.models import request_log, product, order
 from app.middleware.logging_middleware import log_requests_middleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.exceptions import RequestValidationError
+from app.core.exceptions import (
+    http_exception_handler,
+    validation_exception_handler,
+    unhandled_exception_handler,
+)
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,3 +36,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
