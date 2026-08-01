@@ -21,6 +21,14 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="API Gateway")
 
+@app.get("/")
+def root():
+    return {
+        "message": "API Gateway is running",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
 app.include_router(auth.router)
 app.include_router(api_keys.router)
 app.include_router(gateway.router)
