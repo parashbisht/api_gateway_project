@@ -14,6 +14,7 @@ from app.core.exceptions import (
     validation_exception_handler,
     unhandled_exception_handler,
 )
+from app.api.v1 import health
 
 
 Base.metadata.create_all(bind=engine)
@@ -26,6 +27,7 @@ app.include_router(gateway.router)
 app.include_router(analytics.router)
 app.include_router(gateway_routes.router)
 app.include_router(plans.router)
+app.include_router(health.router)
 
 app.middleware("http")(log_requests_middleware)
 app.add_middleware(SecurityHeadersMiddleware)
