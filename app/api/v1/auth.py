@@ -30,7 +30,8 @@ def login(
     db: Session = Depends(get_db),
 ):
     client_ip = request.client.host if request.client else "unknown"
-    check_login_rate_limit(client_ip)
+    request_id = getattr(request.state, "request_id", None)
+    check_login_rate_limit(client_ip, request_id=request_id)
 
     user = db.query(User).filter(User.email == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):

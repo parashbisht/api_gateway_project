@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status, Header
+from fastapi import Depends, HTTPException, status, Header,Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -84,8 +84,9 @@ def get_current_identity(
 )
 
 def rate_limited_identity(
+    request: Request,
     current_identity: User = Depends(get_current_identity),
 ) -> User:
-    check_rate_limit(user_id=current_identity.id, plan=current_identity.plan)
+    request_id = getattr(request.state, "request_id", None)
+    check_rate_limit(user_id=current_identity.id, plan=current_identity.plan, request_id=request_id)
     return current_identity
-    
