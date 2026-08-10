@@ -26,7 +26,16 @@ def test_create_and_list_products(api_client, auth_token):
     assert any(p["name"] == "Test Product" for p in list_response.json())
 
 
-def test_health_check_returns_healthy(api_client):
+def test_health_check_returns_alive(api_client):
     response = api_client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
+    assert response.json()["status"] == "alive"
+
+
+def test_readiness_check_returns_ready(api_client):
+    response = api_client.get("/ready")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["dependencies"]["database"] == "ok"
+    assert body["dependencies"]["redis"] == "ok"
