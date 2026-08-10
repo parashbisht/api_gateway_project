@@ -4,6 +4,9 @@ from app.db.session import SessionLocal
 from app.models.request_log import RequestLog
 from app.models.api_key import APIKey
 from app.core.security import decode_access_token, verify_api_key
+from app.core.logger import get_logger
+
+logger = get_logger("api_gateway.requests")
 
 
 def _identify_user_from_jwt(auth_header: str | None, db) -> int | None:
@@ -36,12 +39,11 @@ async def log_requests_middleware(request: Request, call_next):
 
     response = await call_next(request)
 
-    duration_ms = (time.time() - start_time) * 1000
+    duration_ms = round((time.time() - start_time) * 1000, 2)
+    request_id = getattr(request.state, "request_id", None)
 
     db = SessionLocal()
     try:
-        # Best-effort identification: try JWT first, then API key.
-        # Never raises — logging must not block or break the request either way.
         user_id = _identify_user_from_jwt(request.headers.get("Authorization"), db)
         if user_id is None:
             user_id = _identify_user_from_api_key(request.headers.get("X-API-Key"), db)
@@ -52,11 +54,33 @@ async def log_requests_middleware(request: Request, call_next):
             method=request.method,
             ip_address=request.client.host if request.client else "unknown",
             status_code=response.status_code,
-            response_time_ms=round(duration_ms, 2),
+            response_time_ms=duration_ms,
         )
         db.add(log_entry)
         db.commit()
+    except Exception:
+        logger.error(
+            "Failed to write request log to database",
+            extra={"request_id": request_id, "error": "db_write_failed"},
+        )
     finally:
         db.close()
+
+    # Structured stdout log — separate from the DB row, this is what
+    # production log viewers (Render, etc.) actually show in real time.
+    log_level = logger.error if response.status_code >= 500 else (
+        logger.warning if response.status_code >= 400 else logger.info
+    )
+    log_level(
+        "Request completed",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "response_time_ms": duration_ms,
+            "user_id": user_id,
+        },
+    )
 
     return response

@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 
 from app.db.redis_client import redis_client
 from app.core.plans import PLAN_DETAILS
+from app.core.config import settings
 
 
 def check_rate_limit(user_id: int, plan: str) -> None:
@@ -13,7 +14,7 @@ def check_rate_limit(user_id: int, plan: str) -> None:
         return  # unknown plan or unlimited (enterprise)
 
     max_requests = plan_info["requests_per_hour"]
-    window_seconds = 3600
+    window_seconds = settings.RATE_LIMIT_WINDOW_SECONDS
 
     key = f"rate_limit:{user_id}"
     now = time.time()
@@ -35,14 +36,9 @@ def check_rate_limit(user_id: int, plan: str) -> None:
 
     
 def check_login_rate_limit(ip_address: str) -> None:
-    """
-    Separate, stricter limit for login attempts, keyed by IP instead of
-    user_id — since we don't know who the user is until AFTER they
-    successfully authenticate. Prevents brute-force password guessing.
-    """
     key = f"login_attempts:{ip_address}"
-    max_attempts = 10
-    window_seconds = 300  # 5 minutes
+    max_attempts = settings.LOGIN_RATE_LIMIT_MAX_ATTEMPTS
+    window_seconds = settings.LOGIN_RATE_LIMIT_WINDOW_SECONDS
 
     now = time.time()
     window_start = now - window_seconds
