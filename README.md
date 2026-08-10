@@ -105,12 +105,38 @@ Every request passes through the same auth → rate-limit → logging pipeline r
 ```
 - Unhandled exceptions are logged server-side with full detail but never leak a raw traceback to the client
 
+## Production reliability features (Day 1 upgrade)
+
+### Configuration
+All configuration — database, Redis, JWT secrets, rate-limit thresholds, timeouts — is centralized in `app/core/config.py` and driven entirely by environment variables (see `.env.example`). Nothing is hardcoded in source.
+
+### Request IDs
+Every request is assigned a unique `X-Request-ID` (or the caller's own, if provided), returned in the response header and threaded through every log line and error response for that request — enabling full request tracing without a distributed tracing system.
+
+### Structured logging
+Requests are logged as structured JSON (timestamp, level, request_id, method, path, status_code, response_time, user_id, and error details when applicable), written to stdout — parseable by any standard log viewer without adopting an external observability platform.
+
 ### Health check
-- `GET /health` actively verifies Postgres and Redis connectivity, not just a hardcoded "ok"
+`GET /health` — liveness only. Confirms the FastAPI process is running; performs no dependency checks and stays fast.
+
+### Readiness check
+`GET /ready` — confirms PostgreSQL and Redis are reachable. Returns `503` if either dependency is unavailable, so traffic can be withheld without restarting a healthy process.
+
+### Error handling
+All errors (`HTTPException`, validation errors, unhandled exceptions) return a consistent envelope:
+```json
+{"success": false, "error": {"code": 404, "message": "...", "request_id": "..."}}
+```
+Unhandled exceptions are logged with full detail server-side but never expose internals to the client.
+
+### Redis failure strategy
+Rate limiting fails **open**: if Redis is unreachable, the failure is logged (with request ID) and the request is allowed to continue, rather than taking the entire API down over a secondary feature.
+
+### Downstream timeout handling
+Outbound calls to external/downstream services use an explicit, configurable timeout (`DOWNSTREAM_TIMEOUT_SECONDS`). Timeouts return `504 Gateway Timeout`; connection failures return `502 Bad Gateway` — both logged with request ID correlation.
 
 ### Testing
-- 17 automated tests (pytest + FastAPI's `TestClient`) covering auth, API keys, rate limiting, and gateway routes
-
+27 automated tests (pytest), including 9 new reliability tests covering request IDs, health/readiness, error response structure, Redis fail-open behavior, and downstream timeout handling. External dependencies (Redis failures, slow downstream calls) are mocked for deterministic, fast test runs.
 ---
 
 ## Tech stack
