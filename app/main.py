@@ -16,6 +16,7 @@ from app.core.exceptions import (
     unhandled_exception_handler,
 )
 from app.api.v1 import health
+from app.core.config import settings
 
 
 Base.metadata.create_all(bind=engine)
@@ -42,7 +43,7 @@ app.middleware("http")(log_requests_middleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -98,6 +98,40 @@ Every request passes through the same auth → rate-limit → logging pipeline r
 - Explicit CORS configuration
 - IP-based rate limiting on login to blunt brute-force attempts
 
+## Security
+
+### Authentication
+Two methods are supported and unified through a single dependency (`get_current_identity`):
+- **JWT** (`Authorization: Bearer <token>`) — for human/browser sessions. Signature, expiration, and algorithm are all verified on every request; the algorithm is pinned via configuration, preventing algorithm-confusion attacks.
+- **API keys** (`X-API-Key: <key>`) — for machine-to-machine access. Keys are bcrypt-hashed at rest; the raw key is shown exactly once, at creation, and never stored or re-exposed afterward.
+
+Routes intended only for human dashboard use (e.g. `/me`) accept JWT only. Gateway/data routes accept either method via `get_current_identity`, since both resolve to the same underlying `user_id`.
+
+### Credential Handling
+- Passwords and API keys are hashed with bcrypt; plaintext is never stored.
+- Authentication headers (`Authorization`, `X-API-Key`) are never written to logs — the logging middleware only extracts a resolved `user_id`, never the raw header value.
+- Login failures return a generic "incorrect email or password" message regardless of whether the email exists, preventing user enumeration.
+
+### Rate Limiting & Brute-Force Protection
+General API rate limiting (per-user, sliding window) and login brute-force protection (per-IP) use separate Redis key namespaces (`ratelimit:user:*` vs `ratelimit:login:*`) and do not interfere with each other.
+
+### CORS
+Allowed origins are environment-configurable (`CORS_ALLOWED_ORIGINS`), not hardcoded, so development and production can use different values without a code change.
+
+### Input Validation
+Request bodies are validated via Pydantic (field types, length constraints, numeric bounds). All database access goes through SQLAlchemy's ORM/parameterized queries — no raw SQL string construction from user input exists anywhere in the codebase.
+
+### Authorization Boundaries
+Authenticated identity is always derived from the validated JWT/API key, never from client-supplied request data. Extra fields in a request body (e.g. an attempted `user_id` override) are ignored by the Pydantic schema and have no effect — verified by automated test.
+
+### Secret Management
+All secrets (`SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`) are environment-variable-driven, documented in `.env.example` with placeholder values only. `.env` is gitignored and confirmed never committed to this repository's history.
+
+### Authentication Failure Behavior
+All authentication/authorization failures return the centralized error envelope with a `request_id` for correlation, and appropriate status codes (`401` for missing/invalid credentials, `403` for insufficient plan/permissions, `429` for rate limiting).
+
+**Not implemented (explicitly out of scope for this stage):** refresh tokens, OAuth providers, RBAC, MFA, SSO.
+
 ### Consistent error handling
 - Every error — `HTTPException`, validation errors, and unhandled exceptions — is normalized into one JSON shape:
 ```json
@@ -137,6 +171,73 @@ Outbound calls to external/downstream services use an explicit, configurable tim
 
 ### Testing
 27 automated tests (pytest), including 9 new reliability tests covering request IDs, health/readiness, error response structure, Redis fail-open behavior, and downstream timeout handling. External dependencies (Redis failures, slow downstream calls) are mocked for deterministic, fast test runs.
+
+## Rate Limiting
+
+### Algorithm: Sliding Window
+The rate limiter uses a sliding window (not fixed window), implemented with a Redis sorted set per client. A fixed window allows a client to send up to 2x their limit across a window boundary (e.g., 100 requests in the last second of one window, another 100 in the first second of the next). A sliding window evaluates "the last N seconds from right now," continuously, closing that gap.
+
+### Redis Data Structure
+Each client's request history is stored in a Redis sorted set, where the score is the request timestamp (Unix seconds) and the member is a unique per-request identifier.
+
+### Key Design
+
+Examples:
+- `ratelimit:user:free:42` — per-user limiter, free plan
+- `ratelimit:login:ip:203.0.113.5` — login attempt limiter, keyed by IP
+
+No PII (email, tokens) is embedded in Redis keys — only numeric user IDs or IP addresses.
+
+### Atomicity
+The full sliding-window decision (remove expired entries, count, decide, record, set expiry) executes as a single Redis Lua script (`EVAL`), guaranteeing atomicity from Redis's perspective. This was a deliberate fix for a real race condition in the prior implementation, where the same logic ran as 4 separate Redis round-trips — under concurrent load, two requests could both read the count before either wrote their entry, allowing the limit to be exceeded. Verified fixed via automated concurrency tests (`tests/test_rate_limiter_concurrency.py`) and a load benchmark showing exactly 100/100 allowed under a 100-request limit with 200 concurrent requests, zero overcounting.
+
+### Client Identity
+- **Per-user rate limiting**: keyed by `user_id`, resolved identically whether the request used a JWT or an API key — both credential types for the same user share one bucket, since the limit is meant to apply to the user, not the credential mechanism.
+- **Login attempt limiting**: keyed by IP address, since no authenticated identity exists yet at login time. This is a separate, stricter limiter protecting against credential-stuffing/brute-force attempts.
+
+### Plan-Based Limits
+Defined centrally in `app/core/plans.py`:
+| Plan | Limit |
+|---|---|
+| Free | 100 requests / hour |
+| Premium | 5,000 requests / hour |
+| Enterprise | Unlimited (no rate-limit headers issued) |
+
+The window size is configurable via `RATE_LIMIT_WINDOW_SECONDS`.
+
+### Redis Failure Strategy
+Fails **open**: if Redis is unreachable or times out (2s socket timeout), the failure is logged with the request's correlation ID, and the request is allowed to proceed rather than blocking all traffic over a secondary feature's outage.
+
+### 429 Response
+```json
+{"success": false, "error": {"code": 429, "message": "Rate limit exceeded: ...", "request_id": "..."}}
+```
+Includes a `Retry-After` header with an accurate seconds-until-reset value, calculated from the oldest entry still inside the window.
+
+### Rate-Limit Headers
+Returned on every rate-limited (non-enterprise) response:
+- `X-RateLimit-Limit` — the plan's request ceiling
+- `X-RateLimit-Remaining` — requests left in the current window
+- `X-RateLimit-Reset` — Unix timestamp when the window resets
+
+Omitted entirely for unlimited (enterprise) plans and during Redis fail-open, rather than showing misleading values.
+
+### Concurrency Considerations
+The atomic Lua script prevents race conditions *within a single Redis instance*. This implementation does not provide distributed guarantees across multiple Redis instances/clusters — it assumes a single Redis deployment, which is the current architecture.
+
+### Benchmark (measured, local dev environment)
+Conditions: 200 total requests, 20 concurrent clients, 100 req/hour limit, single-process Uvicorn dev server (`--reload`), local Postgres + Redis.
+
+| Metric | Result |
+|---|---|
+| Requests/sec | 73.65 |
+| Average latency | 263.83ms |
+| p95 latency | 406.85ms |
+| Allowed | 100 |
+| Rejected (429) | 100 |
+| Errors | 0 |
+
+These figures reflect a local development environment, not a tuned production deployment (single worker process, dev-mode reload enabled). Re-run `benchmarks/rate_limit_bench.py` to reproduce.
 ---
 
 ## Tech stack
