@@ -26,8 +26,12 @@ def error_response(code: int, message: str, request_id: str | None) -> JSONRespo
 
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    return error_response(exc.status_code, exc.detail, _get_request_id(request))
-
+    request_id = _get_request_id(request)
+    response = error_response(exc.status_code, exc.detail, request_id)
+    if exc.headers:
+        for key, value in exc.headers.items():
+            response.headers[key] = value
+    return response
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     first_error = exc.errors()[0]
@@ -49,3 +53,4 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         "An unexpected error occurred. Please try again later.",
         request_id,
     )
+

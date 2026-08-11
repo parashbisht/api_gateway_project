@@ -36,5 +36,6 @@ def auth_token(api_client, registered_user):
 @pytest.fixture(autouse=True)
 def clear_login_rate_limit():
     from app.db.redis_client import redis_client
-    redis_client.delete("login_attempts:testclient")
+    redis_client.delete("login_attempts:testclient")  # old format, harmless if unused
+    redis_client.delete("ratelimit:login:ip:testclient")  # current format
     yield
