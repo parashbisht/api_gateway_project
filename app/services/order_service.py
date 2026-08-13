@@ -28,9 +28,20 @@ def create_order(
     return order
 
 
-@router.get("/orders", response_model=list[OrderOut])
+from app.schemas.pagination import PaginationParams
+
+@router.get("/orders")
 def list_my_orders(
+    pagination: PaginationParams = Depends(),
     db: Session = Depends(get_db),
     current_identity: User = Depends(rate_limited_identity),
 ):
-    return db.query(Order).filter(Order.user_id == current_identity.id).all()
+    query = db.query(Order).filter(Order.user_id == current_identity.id)
+    total = query.count()
+    orders = query.order_by(Order.id).offset(pagination.offset).limit(pagination.limit).all()
+    return {
+        "total": total,
+        "limit": pagination.limit,
+        "offset": pagination.offset,
+        "items": [OrderOut.model_validate(o) for o in orders],
+    }

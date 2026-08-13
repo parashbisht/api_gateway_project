@@ -40,13 +40,23 @@ def create_api_key(
     )
 
 
-@router.get("", response_model=list[APIKeyOut])
+from app.schemas.pagination import PaginationParams
+
+@router.get("")
 def list_api_keys(
+    pagination: PaginationParams = Depends(),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return db.query(APIKey).filter(APIKey.user_id == current_user.id).all()
-
+    query = db.query(APIKey).filter(APIKey.user_id == current_user.id)
+    total = query.count()
+    keys = query.order_by(APIKey.id).offset(pagination.offset).limit(pagination.limit).all()
+    return {
+        "total": total,
+        "limit": pagination.limit,
+        "offset": pagination.offset,
+        "items": [APIKeyOut.model_validate(k) for k in keys],
+    }
 
 @router.patch("/{key_id}/disable", response_model=APIKeyOut)
 def disable_api_key(

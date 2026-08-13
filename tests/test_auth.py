@@ -5,7 +5,7 @@ def test_register_new_user(api_client):
         "/api/v1/auth/register",
         json={"email": email, "password": "testpass123"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 201
     body = response.json()
     assert body["email"] == email
     assert "hashed_password" not in body  # security check: never leak the hash

@@ -6,7 +6,7 @@ from app.deps import rate_limited_identity
 from app.models.product import Product
 from app.models.user import User
 from app.schemas.product import ProductCreate, ProductOut
-
+from app.schemas.pagination import PaginationParams
 router = APIRouter()
 
 
@@ -23,13 +23,28 @@ def create_product(
     return product
 
 
-@router.get("/products", response_model=list[ProductOut])
+
+
+@router.get("/products")
 def list_products(
+    pagination: PaginationParams = Depends(),
     db: Session = Depends(get_db),
     current_identity: User = Depends(rate_limited_identity),
 ):
-    return db.query(Product).all()
-
+    total = db.query(Product).count()
+    products = (
+        db.query(Product)
+        .order_by(Product.id)
+        .offset(pagination.offset)
+        .limit(pagination.limit)
+        .all()
+    )
+    return {
+        "total": total,
+        "limit": pagination.limit,
+        "offset": pagination.offset,
+        "items": [ProductOut.model_validate(p) for p in products],
+    }
 
 @router.get("/products/{product_id}", response_model=ProductOut)
 def get_product(

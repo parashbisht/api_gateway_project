@@ -23,8 +23,10 @@ def test_create_and_list_products(api_client, auth_token):
 
     list_response = api_client.get("/gateway/products", headers=headers)
     assert list_response.status_code == 200
-    assert any(p["name"] == "Test Product" for p in list_response.json())
-
+    body = list_response.json()
+    assert "items" in body
+    assert "total" in body
+    assert any(p["name"] == "Test Product" for p in body["items"])
 
 def test_health_check_returns_alive(api_client):
     response = api_client.get("/health")
