@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from typing import Literal
 
 from app.db.session import get_db
 from app.deps import rate_limited_identity
@@ -28,13 +29,15 @@ def create_product(
 @router.get("/products")
 def list_products(
     pagination: PaginationParams = Depends(),
+    sort_by: Literal["id", "name", "price", "created_at"] = "id",
     db: Session = Depends(get_db),
     current_identity: User = Depends(rate_limited_identity),
 ):
     total = db.query(Product).count()
+    sort_column = getattr(Product, sort_by)
     products = (
         db.query(Product)
-        .order_by(Product.id)
+        .order_by(sort_column)
         .offset(pagination.offset)
         .limit(pagination.limit)
         .all()

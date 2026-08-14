@@ -8,7 +8,7 @@ class APIKey(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)               
-    prefix = Column(String, nullable=False)              
+    prefix = Column(String, nullable=False, index=True)             
     hashed_key = Column(String, nullable=False)           
     active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
