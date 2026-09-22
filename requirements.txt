@@ -24,9 +24,9 @@ pluggy==1.6.0
 psycopg2-binary==2.9.12
 pyasn1==0.6.4
 pycparser==3.0
-pydantic==2.13.4
+pydantic==2.12.5
 pydantic-settings==2.14.2
-pydantic_core==2.46.4
+pydantic_core==2.41.5
 Pygments==2.20.0
 pytest==9.1.1
 python-dotenv==1.2.2
@@ -46,3 +46,8 @@ uvicorn==0.51.0
 uvloop==0.22.1
 watchfiles==1.2.0
 websockets==16.1.1
+crewai==1.15.20
+crewai-tools==1.15.20
+langchain-google-genai
+alembic
+tavily-python

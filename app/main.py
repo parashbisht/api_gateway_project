@@ -17,7 +17,7 @@ from app.core.exceptions import (
 )
 from app.api.v1 import health
 from app.core.config import settings
-
+from app.api.v1 import ai_gateway
 
 Base.metadata.create_all(bind=engine)
 
@@ -38,6 +38,8 @@ app.include_router(analytics.router)
 app.include_router(gateway_routes.router)
 app.include_router(plans.router)
 app.include_router(health.router)
+app.include_router(ai_gateway.router)
+
 
 app.middleware("http")(log_requests_middleware)
 app.add_middleware(SecurityHeadersMiddleware)
